@@ -43,12 +43,13 @@
  *
  */
 
-#include <SPI.h>
+#include <Wire.h>
 #include <LoRa.h>
 #include <Ticker.h> // https://github.com/sstaub/Ticker.git
 #include <Adafruit_SleepyDog.h>
 #include <ArduinoJson.h>
 
+#include "SparkFun_SCD30_Arduino_Library.h"
 #include "sensor-utils.h"
 
 #define DEBUG true // set false to suppress debug info on Serial
@@ -67,12 +68,13 @@
 // battery info
 #define BATTERY_ACTIVE true
 
-// pin assignments
+// board pin assignments
 #define LED_BUILTIN 13 // red onboard LED
 #define VBATPIN A9     // for measuring battery voltage
+
+// SCD30 pin assignments
 #define SHT15dataPin A4
 #define SHT15clockPin A5
-#define DH22_DATA_PIN 18 // A0
 
 // feather32u4 LoRa pin assignment
 #define NSS 8    // New Slave Select pin
@@ -95,113 +97,109 @@ JsonObject measurement = doc.createNestedObject("measurement");
 JsonObject status = doc.createNestedObject("status");
 
 // Initialise sensors
-SHT1x sht1x(SHT15dataPin, SHT15clockPin);
+SCD30 airSensor;
 
 unsigned int packetID;
 
 void setup()
 {
-    pinMode(RED_LED, OUTPUT);
-    pinMode(GREEN_LED, OUTPUT);
-    pinMode(BLUE_LED, OUTPUT);
-    pinMode(LED_BUILTIN, OUTPUT);
-    LoRa.setPins(NSS, NRESET, DIO0);
-    digitalWrite(LED_BUILTIN, LOW);
+  pinMode(LED_BUILTIN, OUTPUT);
+  LoRa.setPins(NSS, NRESET, DIO0);
+  digitalWrite(LED_BUILTIN, LOW);
 
-    int lamp_colour = (SLEEP_MODE) ? OFF : RED;
-    utils::setLedColour(lamp_colour);
+  airSensor.begin();
 
-    Serial.begin(115200);
-    delay(2000);
+  Serial.begin(115200);
+  delay(2000);
 
-    utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
+  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
 
-    if (!LoRa.begin(433E6))
-    {
-        Serial.println("Starting LoRa failed.");
-        while (1)
-            ;
-    }
+  if (!LoRa.begin(433E6))
+  {
+    Serial.println("Starting LoRa failed.");
+    while (1)
+      ;
+  }
 
-    packetID = 0;
+  packetID = 0;
 }
 
 void loop()
 {
-    // code resumes here on wake.
+  // code resumes here on wake.
 
-    // serialise the JSON for transmission
-    char serialData[255];
+  // serialise the JSON for transmission
+  char serialData[255];
 
-    ++packetID;
-    doc["packetID"] = packetID;
-    doc["protocol"] = JSON_PROTOCOL;
+  ++packetID;
+  doc["packetID"] = packetID;
+  doc["protocol"] = JSON_PROTOCOL;
 
-    // device
-    device["id"] = DEVICE_ID;
-    device["type"] = FIRMWARE_MCU;
+  // device
+  device["id"] = DEVICE_ID;
+  device["type"] = FIRMWARE_MCU;
 
-    // firmware
-    device_firmware["version"] = FIRMWARE_VERSION;
-    device_firmware["slug"] = FIRMWARE_SLUG;
-    device_firmware["os"] = FIRMWARE_OS;
+  // firmware
+  device_firmware["version"] = FIRMWARE_VERSION;
+  device_firmware["slug"] = FIRMWARE_SLUG;
+  device_firmware["os"] = FIRMWARE_OS;
 
-    // battery
-    float measuredvbat = analogRead(VBATPIN);
-    measuredvbat *= 2;    // we divided by 2, so multiply back
-    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-    measuredvbat /= 1024; // convert to voltage
-    device_battery["active"] = BATTERY_ACTIVE;
-    device_battery["voltage"] = 3.8;
+  // battery
+  float measuredvbat = analogRead(VBATPIN);
+  measuredvbat *= 2;    // we divided by 2, so multiply back
+  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+  measuredvbat /= 1024; // convert to voltage
+  device_battery["active"] = BATTERY_ACTIVE;
+  device_battery["voltage"] = 3.8;
 
-    // lora - NULL for sending device
-    device_lora["RSSI"] = nullptr;
-    device_lora["SNR"] = nullptr;
-    device_lora["frequencyError"] = nullptr;
+  // lora - NULL for sending device
+  device_lora["RSSI"] = nullptr;
+  device_lora["SNR"] = nullptr;
+  device_lora["frequencyError"] = nullptr;
 
-    // sensors
-    measurement["temperature"] = sht1x.readTemperatureC();
-    measurement["humidity"] = sht1x.readHumidity();
-    measurement["co2"] = nullptr;
-    measurement["lux"] = nullptr;
-    measurement["mbars"] = nullptr;
+  // sensors
+  measurement["temperature"] = airSensor.getTemperature();
+  measurement["humidity"] = airSensor.getHumidity();
+  measurement["co2"] = airSensor.getCO2();
+  measurement["lux"] = nullptr;
+  measurement["mbars"] = nullptr;
 
-    // status
-    status["message"] = "OK";
-    status["description"] = nullptr;
+  // status
+  status["message"] = "OK";
+  status["description"] = nullptr;
 
-    serializeJson(doc, serialData);
+  serializeJson(doc, serialData);
 
-    // send in async / non-blocking mode
-    while (LoRa.beginPacket() == 0)
-    {
-        delay(100);
-    }
-    LoRa.beginPacket();
-    LoRa.print(serialData);
-    LoRa.endPacket(true); // true = async / non-blocking mode
+  // send in async / non-blocking mode
+  while (LoRa.beginPacket() == 0)
+  {
+    delay(100);
+  }
+  LoRa.beginPacket();
+  LoRa.print(serialData);
+  LoRa.endPacket(true); // true = async / non-blocking mode
 
-    // signal transmission
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(50);
-    digitalWrite(LED_BUILTIN, LOW);
+  // signal transmission
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(50);
+  digitalWrite(LED_BUILTIN, LOW);
 
-    // log to serial port
-    Serial.println("TX Packet: ");
-    if (DEBUG)
-    {
-        serializeJsonPretty(doc, Serial);
-        Serial.println();
-        Serial.println("---");
-    }
+  // log to serial port
+  Serial.println("TX Packet: ");
+  if (DEBUG)
+  {
+    serializeJsonPretty(doc, Serial);
+    Serial.println();
+    Serial.println("---");
+  }
 
-    // sleep
-    if (SLEEP_MODE)
-    {
-        Watchdog.sleep(SLEEP_SECONDS * 1000);
-    }
-    else
-    {
-        delay(SLEEP_SECONDS * 1000);
-    }
+  // sleep
+  if (SLEEP_MODE)
+  {
+    Watchdog.sleep(SLEEP_SECONDS * 1000);
+  }
+  else
+  {
+    delay(SLEEP_SECONDS * 1000);
+  }
 }
