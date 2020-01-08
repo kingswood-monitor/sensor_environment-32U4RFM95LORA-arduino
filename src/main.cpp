@@ -51,6 +51,7 @@
 
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "Adafruit_VEML7700.h"
+#include "DFRobot_BMP388_I2C.h"
 #include "sensor-utils.h"
 
 #define DEBUG true // set false to suppress debug info on Serial
@@ -100,6 +101,7 @@ JsonObject status = doc.createNestedObject("status");
 // Initialise sensors
 SCD30 airSensor;
 Adafruit_VEML7700 veml = Adafruit_VEML7700();
+DFRobot_BMP388_I2C bmp388;
 
 unsigned int packetID;
 
@@ -127,18 +129,25 @@ void setup()
 
   if (!veml.begin())
   {
-    Serial.println("BMP388 light sensor not found");
+    Serial.println("VEML7700 light sensor not found");
     while (1)
       ;
   }
-  Serial.println("BMP388 light sensor started");
-  Serial.println();
+  Serial.println("VEML7700 light sensor started");
 
   veml.setGain(VEML7700_GAIN_1);
   veml.setIntegrationTime(VEML7700_IT_800MS);
   veml.setLowThreshold(10000);
   veml.setHighThreshold(20000);
   veml.interruptEnable(true);
+
+  while (bmp388.begin())
+  {
+    Serial.println("BMP388 pressure sensor not found");
+    delay(1000);
+  }
+  Serial.println("BMP388 pressure sensor started");
+  Serial.println();
 
   if (!LoRa.begin(433E6))
   {
@@ -189,7 +198,7 @@ void loop()
   measurement["humidity"] = airSensor.getHumidity();
   measurement["co2"] = airSensor.getCO2();
   measurement["lux"] = veml.readLux();
-  measurement["mbars"] = nullptr;
+  measurement["mbars"] = bmp388.readPressure() / 100.0;
 
   // status
   status["message"] = "OK";
