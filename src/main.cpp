@@ -50,6 +50,7 @@
 #include <ArduinoJson.h>
 
 #include "SparkFun_SCD30_Arduino_Library.h"
+#include "Adafruit_VEML7700.h"
 #include "sensor-utils.h"
 
 #define DEBUG true // set false to suppress debug info on Serial
@@ -98,21 +99,46 @@ JsonObject status = doc.createNestedObject("status");
 
 // Initialise sensors
 SCD30 airSensor;
+Adafruit_VEML7700 veml = Adafruit_VEML7700();
 
 unsigned int packetID;
 
 void setup()
 {
+  Serial.begin(115200);
+  delay(2000);
+
+  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
+
   pinMode(LED_BUILTIN, OUTPUT);
   LoRa.setPins(NSS, NRESET, DIO0);
   digitalWrite(LED_BUILTIN, LOW);
 
   airSensor.begin();
+  if (!airSensor.dataAvailable())
+  {
+    Serial.println("SCD30 air sensor not found");
+    while (1)
+      ;
+  }
+  Serial.println("SCD30 air sensor started");
+  airSensor.setMeasurementInterval(4);
+  airSensor.setAmbientPressure(1013); // move this into loop and use barometric presssure
 
-  Serial.begin(115200);
-  delay(2000);
+  if (!veml.begin())
+  {
+    Serial.println("BMP388 light sensor not found");
+    while (1)
+      ;
+  }
+  Serial.println("BMP388 light sensor started");
+  Serial.println();
 
-  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
+  veml.setGain(VEML7700_GAIN_1);
+  veml.setIntegrationTime(VEML7700_IT_800MS);
+  veml.setLowThreshold(10000);
+  veml.setHighThreshold(20000);
+  veml.interruptEnable(true);
 
   if (!LoRa.begin(433E6))
   {
@@ -120,6 +146,7 @@ void setup()
     while (1)
       ;
   }
+  Serial.println("LoRa started");
 
   packetID = 0;
 }
@@ -161,7 +188,7 @@ void loop()
   measurement["temperature"] = airSensor.getTemperature();
   measurement["humidity"] = airSensor.getHumidity();
   measurement["co2"] = airSensor.getCO2();
-  measurement["lux"] = nullptr;
+  measurement["lux"] = veml.readLux();
   measurement["mbars"] = nullptr;
 
   // status
@@ -188,9 +215,9 @@ void loop()
   Serial.println("TX Packet: ");
   if (DEBUG)
   {
+    Serial.println("---");
     serializeJsonPretty(doc, Serial);
     Serial.println();
-    Serial.println("---");
   }
 
   // sleep
