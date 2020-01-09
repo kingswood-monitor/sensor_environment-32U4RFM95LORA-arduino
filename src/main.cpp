@@ -1,6 +1,6 @@
 /** Kingswood Monitor LoRa Environment Sensor
  * 
- *  sensor-environment-32U4RFM95LORA-arduino
+ *  sensor_environment_external-32U4RFM95LORA-arduino
  *
  *  Firmware for a LoRa based sensor. Detects which sensors are connected - access is 
  *  via "CompositeSensor" object which provides a unified interface for different sensor 
