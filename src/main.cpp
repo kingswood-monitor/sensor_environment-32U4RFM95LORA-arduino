@@ -1,92 +1,33 @@
-/* Kingswood Monitor Environment Sensor (LoRa)
+/* Kingswood Monitor LoRa Environment Sensor
  *
- * Firmware for a LoRa based sensor
- * Reads sensor data and battery voltage
- * Package as JSON strind
- * Transmits
+ * Firmware for a LoRa based sensor. Reads sensor data and battery voltage, packages it as JSON string,
+ * and transmits it over LoRa.
+ * 
+ * Set firmware name 
  *
  * NOTE:
  * Implements 'sleep' function between data transmission, which disables the USB serial line.
  * Reset the device before flashing.
  *
- *  Format
- *  ------------------------------------------------------------
-    packetID = 1234
-    protocol n = 1.1
-
-    device
-      ID = ESP8266-001
-      type = ESP8266
-      firmware
-        version n = 0.2
-        slug = sensor-environment-outside-32U4RFM95LORA-arduino
-        os = mongoose
-      battery
-        active b = true
-        voltage n = 3.8
-      lora
-        RSSI n = -98
-        SNR n = 23
-        frequencyError n = 12234
-
-    measurement
-      temperature n = 21.1
-      humidity n = 87
-      co2 = 567
-      lux n = 600
-      mbars n = 1023
-
-    status
-      message = OK
-      description = All's well
-    ---------------------------------------------------------------
- *
  */
-
-#include <Wire.h>
 #include <LoRa.h>
-#include <Ticker.h> // https://github.com/sstaub/Ticker.git
+#include <Ticker.h>
 #include <Adafruit_SleepyDog.h>
 #include <ArduinoJson.h>
 
-#include "SparkFun_SCD30_Arduino_Library.h"
-#include "Adafruit_VEML7700.h"
-#include "DFRobot_BMP388_I2C.h"
 #include "sensor-utils.h"
+#include "CompositeSensor.h"
+#include "config.h"
 
 #define DEBUG true // set false to suppress debug info on Serial
 
-#define MQTT_TOPIC_ROOT "greenhouse"
-
-// firmware info
-#define FIRMWARE_NAME "Environment Sensor (Greenhouse)"
-#define FIRMWARE_VERSION "0.2"
-#define FIRMWARE_SLUG "sensor-environment-greenhouse-32U4RFM95LORA-arduino"
-#define FIRMWARE_MCU "32U4RFM95LORA"
-#define FIRMWARE_OS "arduino"
-#define DEVICE_ID "002" // comment out if device has Sys.DeviceID()
-#define JSON_PROTOCOL "1.1"
-
-// battery info
-#define BATTERY_ACTIVE true
-
 // board pin assignments
 #define LED_BUILTIN 13 // red onboard LED
-#define VBATPIN A9     // for measuring battery voltage
-
-// SCD30 pin assignments
-#define SHT15dataPin A4
-#define SHT15clockPin A5
 
 // feather32u4 LoRa pin assignment
 #define NSS 8    // New Slave Select pin
 #define NRESET 4 // Reset pin
 #define DIO0 7   // DIO0 pin
-
-// set true to sleep between transmissions to conserve battery
-#define SLEEP_MODE false
-// number of seconds between transmissions
-#define SLEEP_SECONDS 3
 
 const size_t capacity = 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(3) + 3 * JSON_OBJECT_SIZE(5);
 StaticJsonDocument<capacity> doc;
@@ -99,9 +40,7 @@ JsonObject measurement = doc.createNestedObject("measurement");
 JsonObject status = doc.createNestedObject("status");
 
 // Initialise sensors
-SCD30 airSensor;
-Adafruit_VEML7700 veml = Adafruit_VEML7700();
-DFRobot_BMP388_I2C bmp388;
+CompositeSensor mySensor;
 
 unsigned int packetID;
 
@@ -110,44 +49,20 @@ void setup()
   Serial.begin(115200);
   delay(2000);
 
-  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
-
-  pinMode(LED_BUILTIN, OUTPUT);
   LoRa.setPins(NSS, NRESET, DIO0);
   digitalWrite(LED_BUILTIN, LOW);
 
-  airSensor.begin();
-  if (!airSensor.dataAvailable())
-  {
-    Serial.println("SCD30 air sensor not found");
-    while (1)
-      ;
-  }
-  Serial.println("SCD30 air sensor started");
-  airSensor.setMeasurementInterval(4);
-  airSensor.setAmbientPressure(1013); // move this into loop and use barometric presssure
+  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
 
-  if (!veml.begin())
-  {
-    Serial.println("VEML7700 light sensor not found");
-    while (1)
-      ;
-  }
-  Serial.println("VEML7700 light sensor started");
-
-  veml.setGain(VEML7700_GAIN_1);
-  veml.setIntegrationTime(VEML7700_IT_800MS);
-  veml.setLowThreshold(10000);
-  veml.setHighThreshold(20000);
-  veml.interruptEnable(true);
-
-  while (bmp388.begin())
-  {
-    Serial.println("BMP388 pressure sensor not found");
-    delay(1000);
-  }
-  Serial.println("BMP388 pressure sensor started");
-  Serial.println();
+  mySensor.begin();
+  if (mySensor.hasSCD30)
+    Serial.println("SCD30 started");
+  if (mySensor.hasBMP388)
+    Serial.println("BMP388 started");
+  if (mySensor.hasVEML7700)
+    Serial.println("VEML7700 started");
+  if (mySensor.hasHDC1080)
+    Serial.println("HDC1080 started");
 
   if (!LoRa.begin(433E6))
   {
@@ -156,7 +71,6 @@ void setup()
       ;
   }
   Serial.println("LoRa started");
-
   packetID = 0;
 }
 
@@ -181,12 +95,8 @@ void loop()
   device_firmware["os"] = FIRMWARE_OS;
 
   // battery
-  float measuredvbat = analogRead(VBATPIN);
-  measuredvbat *= 2;    // we divided by 2, so multiply back
-  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-  measuredvbat /= 1024; // convert to voltage
   device_battery["active"] = BATTERY_ACTIVE;
-  device_battery["voltage"] = 3.8;
+  device_battery["voltage"] = mySensor.readBattery();
 
   // lora - NULL for sending device
   device_lora["RSSI"] = nullptr;
@@ -194,11 +104,11 @@ void loop()
   device_lora["frequencyError"] = nullptr;
 
   // sensors
-  measurement["temperature"] = airSensor.getTemperature();
-  measurement["humidity"] = airSensor.getHumidity();
-  measurement["co2"] = airSensor.getCO2();
-  measurement["lux"] = veml.readLux();
-  measurement["mbars"] = bmp388.readPressure() / 100.0;
+  measurement["temperature"] = mySensor.readTemperature();
+  measurement["humidity"] = mySensor.readHumidity();
+  measurement["co2"] = mySensor.readCO2();
+  measurement["lux"] = mySensor.readLight();
+  measurement["mbars"] = mySensor.readPressure();
 
   // status
   status["message"] = "OK";
