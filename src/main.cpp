@@ -1,14 +1,16 @@
-/* Kingswood Monitor LoRa Environment Sensor
- *
- * Firmware for a LoRa based sensor. Reads sensor data and battery voltage, packages it as JSON string,
- * and transmits it over LoRa.
+/** Kingswood Monitor LoRa Environment Sensor
  * 
- * Set firmware name 
+ *  sensor-environment-32U4RFM95LORA-arduino
  *
- * NOTE:
- * Implements 'sleep' function between data transmission, which disables the USB serial line.
- * Reset the device before flashing.
- *
+ *  Firmware for a LoRa based sensor. Detects which sensors are connected - access is 
+ *  via "CompositeSensor" object which provides a unified interface for different sensor 
+ *  types. Packages readings in a JSON string, serialises it, and transmits it over LoRa.
+ * 
+ *  Set configuration variables in 'config.h'. 
+ * 
+ *  NOTE: Implements 'sleep' function between data transmission, which disables 
+ *  the USB serial line. Reset the device before flashing.
+ * 
  */
 #include <LoRa.h>
 #include <Ticker.h>
