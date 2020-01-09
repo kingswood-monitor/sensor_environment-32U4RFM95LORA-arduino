@@ -85,7 +85,6 @@ void loop()
 
   ++packetID;
   doc["packetID"] = packetID;
-  doc["protocol"] = JSON_PROTOCOL;
 
   // device
   device["id"] = DEVICE_ID;
