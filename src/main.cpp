@@ -54,17 +54,17 @@ void setup()
   LoRa.setPins(NSS, NRESET, DIO0);
   digitalWrite(LED_BUILTIN, LOW);
 
-  utils::printBanner(FIRMWARE_NAME, FIRMWARE_VERSION, FIRMWARE_SLUG, JSON_PROTOCOL, FIRMWARE_MCU, FIRMWARE_OS, DEVICE_ID);
+  utils::printBanner(FIRMWARE_NAME, FIRMWARE_SLUG, FIRMWARE_VERSION, DEVICE_ID);
 
   mySensor.begin();
   if (mySensor.hasSCD30)
-    Serial.println("SCD30 started");
-  if (mySensor.hasBMP388)
-    Serial.println("BMP388 started");
-  if (mySensor.hasVEML7700)
-    Serial.println("VEML7700 started");
+    Serial.println("Sensor: SCD30 (Temperature / Humidity / CO2)");
   if (mySensor.hasHDC1080)
-    Serial.println("HDC1080 started");
+    Serial.println("Sensor: HDC1080 (Temperature / Humidity)");
+  if (mySensor.hasBMP388)
+    Serial.println("Sensor: BMP388 (Pressure / Temperature)");
+  if (mySensor.hasVEML7700)
+    Serial.println("Sensor: VEML7700 (Lux)");
 
   if (!LoRa.begin(433E6))
   {
