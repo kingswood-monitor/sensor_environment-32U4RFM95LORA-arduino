@@ -19,7 +19,21 @@
 
 #include "sensor-utils.h"
 #include "CompositeSensor.h"
-#include "config.h"
+
+#define FIRMWARE_VERSION "0.22"
+#define SENSOR_TYPE "External Environment Sensor"
+#define FIRMWARE_SLUG "sensor_environment_external-32U4RFM95LORA-arduino"
+#define FIRMWARE_MCU "32U4RFM95LORA"
+#define FIRMWARE_OS "arduino"
+#define DEVICE_ID "32U4RFM95LORA-002" // comment out if device has Sys.DeviceID()
+
+// battery info
+#define BATTERY_ACTIVE true
+
+// set true to sleep between transmissions to conserve battery
+#define SLEEP_MODE false
+// number of seconds between transmissions
+#define SLEEP_SECONDS 3
 
 #define DEBUG true // set false to suppress debug info on Serial
 
@@ -54,7 +68,7 @@ void setup()
   LoRa.setPins(NSS, NRESET, DIO0);
   digitalWrite(LED_BUILTIN, LOW);
 
-  utils::printBanner(FIRMWARE_NAME, FIRMWARE_SLUG, FIRMWARE_VERSION, DEVICE_ID);
+  utils::printBanner(SENSOR_TYPE, FIRMWARE_SLUG, FIRMWARE_VERSION, DEVICE_ID);
 
   mySensor.begin();
   if (mySensor.hasSCD30)
