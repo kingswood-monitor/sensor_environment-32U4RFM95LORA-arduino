@@ -20,15 +20,13 @@
 #include "sensor-utils.h"
 #include "CompositeSensor.h"
 
+#define DEVICE_ID "outside" // comment out if device has Sys.DeviceID()
+
 #define FIRMWARE_VERSION "0.22"
 #define SENSOR_TYPE "External Environment Sensor"
 #define FIRMWARE_SLUG "sensor_environment_external-32U4RFM95LORA-arduino"
 #define FIRMWARE_MCU "32U4RFM95LORA"
 #define FIRMWARE_OS "arduino"
-#define DEVICE_ID "32U4RFM95LORA-002" // comment out if device has Sys.DeviceID()
-
-// battery info
-#define BATTERY_ACTIVE true
 
 // set true to sleep between transmissions to conserve battery
 #define SLEEP_MODE false
@@ -45,15 +43,10 @@
 #define NRESET 4 // Reset pin
 #define DIO0 7   // DIO0 pin
 
-const size_t capacity = 2 * JSON_OBJECT_SIZE(2) + 2 * JSON_OBJECT_SIZE(3) + 3 * JSON_OBJECT_SIZE(5);
+const size_t capacity = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5);
 StaticJsonDocument<capacity> doc;
-
 JsonObject device = doc.createNestedObject("device");
-JsonObject device_firmware = device.createNestedObject("firmware");
-JsonObject device_battery = device.createNestedObject("battery");
-JsonObject device_lora = device.createNestedObject("lora");
-JsonObject measurement = doc.createNestedObject("measurement");
-JsonObject status = doc.createNestedObject("status");
+JsonObject data = doc.createNestedObject("data");
 
 // Initialise sensors
 CompositeSensor mySensor;
@@ -99,35 +92,19 @@ void loop()
 
   ++packetID;
   doc["packetID"] = packetID;
+  doc["status"] = 1;
 
   // device
   device["id"] = DEVICE_ID;
-  device["type"] = FIRMWARE_MCU;
+  device["version"] = FIRMWARE_VERSION;
+  device["volts"] = mySensor.readBattery();
 
-  // firmware
-  device_firmware["version"] = FIRMWARE_VERSION;
-  device_firmware["slug"] = FIRMWARE_SLUG;
-  device_firmware["os"] = FIRMWARE_OS;
-
-  // battery
-  device_battery["active"] = BATTERY_ACTIVE;
-  device_battery["voltage"] = mySensor.readBattery();
-
-  // lora - NULL for sending device
-  device_lora["RSSI"] = nullptr;
-  device_lora["SNR"] = nullptr;
-  device_lora["frequencyError"] = nullptr;
-
-  // sensors
-  measurement["temperature"] = mySensor.readTemperature();
-  measurement["humidity"] = mySensor.readHumidity();
-  measurement["co2"] = mySensor.readCO2();
-  measurement["lux"] = mySensor.readLight();
-  measurement["mbars"] = mySensor.readPressure();
-
-  // status
-  status["message"] = "OK";
-  status["description"] = nullptr;
+  // data
+  data["temp"] = mySensor.readTemperature();
+  data["humidity"] = mySensor.readHumidity();
+  data["co2"] = mySensor.readCO2();
+  data["lux"] = mySensor.readLight();
+  data["mbars"] = mySensor.readPressure();
 
   serializeJson(doc, serialData);
 
