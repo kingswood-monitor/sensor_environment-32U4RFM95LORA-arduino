@@ -92,7 +92,7 @@ const size_t EEPROM_SIZE = E2END + 1;
 RH_RF95 driver(RFM95_CS, RFM95_INT);
 
 // Class to manage message delivery and receipt, using the driver declared above
-RHReliableDatagram manager(driver, CLIENT_ADDRESS);
+RHReliableDatagram manager(driver, 999);
 
 // Timers for LED flashing
 void flashLED(int times, int millis);
@@ -101,6 +101,7 @@ void setup()
 {
   Serial.begin(115200);
   delay(2000);
+  digitalWrite(LED_BUILTIN, LOW);
 
   if (LOAD_CONFIG)
   {
@@ -115,7 +116,7 @@ void setup()
     Serial.println("Configuration saved to EEPROM");
   }
 
-  digitalWrite(LED_BUILTIN, LOW);
+  manager.setThisAddress(Config.clientAddress);
 
   utils::printBanner(SENSOR_TYPE, FIRMWARE_SLUG, FIRMWARE_VERSION, Config.deviceID);
 
@@ -139,7 +140,7 @@ void loop()
   uint8_t data[sizeof(readings)];
   memcpy(data, &readings, sizeof(readings));
 
-  if (manager.sendtoWait(data, sizeof(data), SERVER_ADDRESS))
+  if (manager.sendtoWait(data, sizeof(data), Config.serverAddress))
   {
     // Now wait for a reply from the server
     uint8_t len = sizeof(buf);
@@ -149,7 +150,7 @@ void loop()
       Serial.print("Server:");
       Serial.println((char *)buf);
 
-      flashLED(CLIENT_ADDRESS, 150);
+      flashLED(Config.clientAddress, 150);
     }
     else
     {
