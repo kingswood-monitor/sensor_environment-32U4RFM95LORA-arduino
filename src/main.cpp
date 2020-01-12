@@ -15,16 +15,10 @@
 #include <RHReliableDatagram.h>
 #include <RH_RF95.h>
 #include <Ticker.h>
+#include <EEPROM.h>
 
 #include "sensor-utils.h"
 #include "CompositeSensor.h"
-
-#define DEVICE_ID "Greenhouse" // comment out if device has Sys.DeviceID()
-
-// Radiohead addresses
-#define SERVER_ADDRESS 1
-// #define CLIENT_ADDRESS 2 // Outside
-#define CLIENT_ADDRESS 3 // Greenhouse
 
 #define FIRMWARE_VERSION "0.23"
 #define SENSOR_TYPE "External Environment Sensor"
@@ -45,6 +39,48 @@
 // board pin assignments
 #define LED_BUILTIN 13 // red onboard LED
 
+//********************************** CONFIG ***********************************//
+#define LOAD_CONFIG true // set false to save config
+#define CONFIG_VERSION "001"
+#define CONFIG_START 0
+
+// Radiohead addresses - comment out as required
+#define SERVER_ADDRESS 1
+#define CLIENT_ADDRESS 2 // Outside
+// #define CLIENT_ADDRESS 3            // Greenhouse
+#define DEVICE_ID "32U4RFM95LORA-2" // set the index to CLIENT ADDRESS TODO make this programmatic
+
+struct ConfigStruct
+{
+  char version[4];
+  char deviceID[20];
+  int serverAddress;
+  int clientAddress;
+} Config = {CONFIG_VERSION, DEVICE_ID, SERVER_ADDRESS, CLIENT_ADDRESS};
+
+bool loadConfig()
+{
+  if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
+      EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
+      EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
+  {
+    for (unsigned int t = 0; t < sizeof(Config); t++)
+      *((char *)&Config + t) = EEPROM.read(CONFIG_START + t);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+void saveConfig()
+{
+  for (unsigned int t = 0; t < sizeof(Config); t++)
+    EEPROM.write(CONFIG_START + t, *((char *)&Config + t));
+}
+
+//*********************************************************************************//
 // Initialise sensors
 CompositeSensor mySensor;
 
@@ -63,18 +99,31 @@ void flashLED(int times, int millis);
 
 void setup()
 {
-  digitalWrite(LED_BUILTIN, LOW);
-
   Serial.begin(115200);
   delay(2000);
 
-  utils::printBanner(SENSOR_TYPE, FIRMWARE_SLUG, FIRMWARE_VERSION, DEVICE_ID);
+  if (LOAD_CONFIG)
+  {
+    if (loadConfig())
+      Serial.println("Configuration loaded");
+    else
+      Serial.println("ERROR: Failed to load configuration");
+  }
+  else
+  {
+    saveConfig();
+    Serial.println("Configuration saved to EEPROM");
+  }
+
+  digitalWrite(LED_BUILTIN, LOW);
+
+  utils::printBanner(SENSOR_TYPE, FIRMWARE_SLUG, FIRMWARE_VERSION, Config.deviceID);
 
   // start LoRa
   if (manager.init())
   {
     Serial.print("LoRa client started, ID:");
-    Serial.println(CLIENT_ADDRESS);
+    Serial.println(Config.clientAddress);
   }
 
   mySensor.begin();
