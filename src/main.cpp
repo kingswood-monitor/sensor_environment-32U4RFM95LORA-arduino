@@ -81,21 +81,16 @@ void setup()
   // readSensors.start();
 }
 
+// don't put this on the stack
+uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+
 void loop()
 {
-  // code resumes here on wake.
-
   CompositeSensor::SensorReadings readings = mySensor.readSensors();
+  uint8_t data[sizeof(readings)];
+  memcpy(data, &readings, sizeof(readings));
 
-  // serialise the JSON for transmission
-  uint8_t serialData[RH_RF95_MAX_MESSAGE_LEN];
-  uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-
-  byte zize = sizeof(readings);
-  memcpy(buf, &readings, zize);
-
-  // send message to manager server
-  if (manager.sendtoWait(buf, zize, SERVER_ADDRESS))
+  if (manager.sendtoWait(data, sizeof(data), SERVER_ADDRESS))
   {
     // Now wait for a reply from the server
     uint8_t len = sizeof(buf);
@@ -104,16 +99,20 @@ void loop()
     {
       Serial.print("Server:");
       Serial.println((char *)buf);
+
       flashLED(CLIENT_ADDRESS, 150);
     }
     else
     {
       Serial.println("No reply, is rf95_reliable_datagram_server running?");
-      flashLED(1, 1000);
+      flashLED(1, 500);
     }
   }
   else
+  {
     Serial.println("sendtoWait failed");
+    flashLED(1, 2000);
+  }
 
   delay(SLEEP_SECONDS * 1000);
 }
